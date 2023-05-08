@@ -2,6 +2,7 @@ import numpy as np
 import copy
 import pandas as pd
 
+
 def load_data(filename):
     """ Load all characters from text file"""
 
@@ -26,6 +27,41 @@ def one_hot_decoding(one_hot, ind_to_char):
 def rel_error(x, y):
     """ returns relative error """
     return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
+
+
+def get_n_grams(X, n):
+    """Divide data into n-grams"""
+    X = X.replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace("(", "").replace(")", "").split()
+    N = len(X)
+    data = [""]*(N-n+1)
+    for i in range(N-n+1):
+        gram = " ".join(X[i:i+n])
+        data[i] = gram
+    return data
+
+
+def measure_performance(Y_gen, Y_val):
+    """Measures BLEU score for generated text, for n-gram size 1 to 4"""
+    precision_score = 1
+    for n in range(4,0, -1):
+        words_gen = get_n_grams(copy.deepcopy(Y_gen), n)
+        words_val = get_n_grams(copy.deepcopy(Y_val), n)
+        correct_grams = 0
+        output_length = len(words_gen)
+        reference_length = len(words_val)
+        for gram_gen in words_gen:
+            if gram_gen in words_val:
+                correct_grams += 1 
+        
+        precision = correct_grams/output_length
+        precision_score *= precision**(1/4) 
+
+    brevity_penalty = min(1,output_length/reference_length)   
+    bleu = brevity_penalty*precision_score
+    return bleu
+ 
+
+
 
 class RNN:
     def __init__(self, m, k, eta, seq_length, sig):
@@ -114,15 +150,15 @@ class RNN:
             np.clip(param, -5, 5, out=param)
         return dU, dV, dW, db, dc
     
-    def adagrad(self, X, Y, h0):
+    def adagrad(self, X, Y, h0, i):
         """ Train model with adagrad"""
         loss, p, h, a, o = self.forward(h0, X, Y)
         dU, dV, dW, db, dc = self.backward(X, Y, p, h, a, o)
-      
+        gamma = 0.9
         for param, dparam, mem in zip([self.U, self.V, self.W, self.b, self.c],
                                   [dU, dV, dW, db, dc],
                                   [self.mU, self.mV, self.mW, self.mb, self.mc]):
-            mem += dparam * dparam
+            mem += gamma*mem + (1-gamma)*dparam*dparam if i>0 else dparam * dparam
             param += -self.eta * dparam / np.sqrt(mem + 1e-8)
         return loss
     
