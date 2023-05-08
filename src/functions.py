@@ -2,6 +2,7 @@ import numpy as np
 import copy
 import pandas as pd
 
+
 def load_data(filename):
     """ Load all characters from text file"""
 
@@ -26,6 +27,54 @@ def one_hot_decoding(one_hot, ind_to_char):
 def rel_error(x, y):
     """ returns relative error """
     return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
+
+
+def get_n_grams(text, n):
+    """Divide data into n-grams"""
+    word_list = text.replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace("(", "").replace(")", "").split()
+    N = len(word_list)
+    data = [""]*(N-n+1)
+    for i in range(N-n+1):
+        gram = " ".join(word_list[i:i+n])
+        data[i] = gram
+    return data
+
+
+def measure_diversity(text_generated):
+    """Measures the amount of repetition in a longer generated text, using self-BLUE metric"""
+    all_sentences = [s for s in text_generated.split(".") if s]
+    N = len(all_sentences)
+    bleu_scores = [0]*N
+    for i in range(N):
+        s = all_sentences[i]
+        sentences_copy = copy.deepcopy(all_sentences)
+        sentences_copy.remove(s)
+        correct_frac, bleu = measure_bleu(s, ".".join(sentences_copy))
+        bleu_scores[i] = bleu        
+    return np.mean(bleu_scores)
+
+
+def measure_bleu(text_generated, text_val):
+    """Measures the fraction of corrrectly spelled words and BLEU score"""
+    precision_score = 1
+    nmax = 3
+    for n in range(nmax,0, -1):
+        words_gen = get_n_grams(copy.deepcopy(text_generated), n)
+        words_val = get_n_grams(copy.deepcopy(text_val), n)
+        correct_grams_p = 0
+        output_length = len(words_gen)
+        reference_length = len(words_val)
+        for gram_gen in words_gen:
+            if gram_gen in words_val:
+                correct_grams_p += 1 
+        
+        precision = correct_grams_p/output_length
+        precision_score *= precision**(1/nmax) 
+    
+    fraction_correct_words = precision     # since last iteration of for-loop is 1-grams   
+    bleu = precision_score * min(1,output_length/reference_length)     
+    return fraction_correct_words, bleu
+
 
 def split_input_target(batch):
     input_text = batch[:-1]
@@ -120,15 +169,15 @@ class RNN:
             np.clip(param, -5, 5, out=param)
         return dU, dV, dW, db, dc
     
-    def adagrad(self, X, Y, h0):
+    def adagrad(self, X, Y, h0, i):
         """ Train model with adagrad"""
         loss, p, h, a, o = self.forward(h0, X, Y)
         dU, dV, dW, db, dc = self.backward(X, Y, p, h, a, o)
-      
+        gamma = 0.9
         for param, dparam, mem in zip([self.U, self.V, self.W, self.b, self.c],
                                   [dU, dV, dW, db, dc],
                                   [self.mU, self.mV, self.mW, self.mb, self.mc]):
-            mem += dparam * dparam
+            mem += gamma*mem + (1-gamma)*dparam*dparam if i>0 else dparam * dparam
             param += -self.eta * dparam / np.sqrt(mem + 1e-8)
         return loss
     
