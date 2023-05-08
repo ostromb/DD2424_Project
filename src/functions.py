@@ -29,38 +29,51 @@ def rel_error(x, y):
     return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
 
-def get_n_grams(X, n):
+def get_n_grams(text, n):
     """Divide data into n-grams"""
-    X = X.replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace("(", "").replace(")", "").split()
-    N = len(X)
+    word_list = text.replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace("(", "").replace(")", "").split()
+    N = len(word_list)
     data = [""]*(N-n+1)
     for i in range(N-n+1):
-        gram = " ".join(X[i:i+n])
+        gram = " ".join(word_list[i:i+n])
         data[i] = gram
     return data
 
 
-def measure_performance(Y_gen, Y_val):
-    """Measures BLEU score for generated text, for n-gram size 1 to 4"""
+def measure_diversity(text_generated):
+    """Measures the amount of repetition in a longer generated text, using self-BLUE metric"""
+    all_sentences = [s for s in text_generated.split(".") if s]
+    N = len(all_sentences)
+    bleu_scores = [0]*N
+    for i in range(N):
+        s = all_sentences[i]
+        sentences_copy = copy.deepcopy(all_sentences)
+        sentences_copy.remove(s)
+        correct_frac, bleu = measure_bleu(s, ".".join(sentences_copy))
+        bleu_scores[i] = bleu        
+    return np.mean(bleu_scores)
+
+
+def measure_bleu(text_generated, text_val):
+    """Measures the fraction of corrrectly spelled words and BLEU score"""
     precision_score = 1
-    for n in range(4,0, -1):
-        words_gen = get_n_grams(copy.deepcopy(Y_gen), n)
-        words_val = get_n_grams(copy.deepcopy(Y_val), n)
-        correct_grams = 0
+    nmax = 3
+    for n in range(nmax,0, -1):
+        words_gen = get_n_grams(copy.deepcopy(text_generated), n)
+        words_val = get_n_grams(copy.deepcopy(text_val), n)
+        correct_grams_p = 0
         output_length = len(words_gen)
         reference_length = len(words_val)
         for gram_gen in words_gen:
             if gram_gen in words_val:
-                correct_grams += 1 
+                correct_grams_p += 1 
         
-        precision = correct_grams/output_length
-        precision_score *= precision**(1/4) 
-
-    brevity_penalty = min(1,output_length/reference_length)   
-    bleu = brevity_penalty*precision_score
-    return bleu
- 
-
+        precision = correct_grams_p/output_length
+        precision_score *= precision**(1/nmax) 
+    
+    fraction_correct_words = precision     # since last iteration of for-loop is 1-grams   
+    bleu = precision_score * min(1,output_length/reference_length)     
+    return fraction_correct_words, bleu
 
 
 class RNN:
