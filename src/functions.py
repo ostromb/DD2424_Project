@@ -27,6 +27,12 @@ def rel_error(x, y):
     """ returns relative error """
     return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
+def split_input_target(batch):
+    input_text = batch[:-1]
+    """ offset target by one time step """
+    target_text = batch[1:]
+    return input_text, target_text
+
 class RNN:
     def __init__(self, m, k, eta, seq_length, sig):
         self.m = m
