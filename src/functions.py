@@ -1,0 +1,168 @@
+import numpy as np
+import copy
+import pandas as pd
+
+def load_data(filename):
+    """ Load all characters from text file"""
+
+    with open(filename, 'r') as f:
+        data = [c for c in f.read()]
+    return data
+
+def one_hot_encoding(data, char_to_ind, k):
+    """ One hot encoding of data"""
+    one_hot = np.zeros((k, len(data)))
+    for i, c in enumerate(data):
+        one_hot[char_to_ind[c], i] = 1
+    return one_hot
+
+def one_hot_decoding(one_hot, ind_to_char):
+    """ Decode one hot encoding"""
+    data = ''
+    for i in range(one_hot.shape[1]):
+        data += ind_to_char[np.argmax(one_hot[:, i])]
+    return data
+
+def rel_error(x, y):
+    """ returns relative error """
+    return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
+
+class RNN:
+    def __init__(self, m, k, eta, seq_length, sig):
+        self.m = m
+        self.k = k
+        self.eta = eta
+        self.seq_length = seq_length
+        self.sig = sig
+        self.b = np.zeros((m, 1))
+        self.c = np.zeros((k, 1))
+        self.U = np.random.normal(0, sig, (m, k))
+        self.W = np.random.normal(0, sig, (m, m))
+        self.V = np.random.normal(0, sig, (k, m))
+        self.hprev = np.zeros((m, 1))
+        self.mU = np.zeros_like(self.U)
+        self.mV = np.zeros_like(self.V)
+        self.mW = np.zeros_like(self.W)
+        self.mb = np.zeros_like(self.b)
+        self.mc = np.zeros_like(self.c)
+        
+    
+    def softmax(self, x):
+        """Compute softmax values for each sets of scores in x."""
+        return np.exp(x) / np.sum(np.exp(x), axis=0)
+    
+    def synthetize(self, h0, x0, n):
+        """ Synthetize text"""
+        x = x0
+        h = h0
+        y = np.zeros((self.k, n))
+
+        for t in range(n):
+            a = self.W.dot(h)+self.U.dot(x)+self.b
+            h = np.tanh(a)
+            o = self.V.dot(h)+self.c
+            p = self.softmax(o)
+        
+            cp = np.cumsum(p, axis=0)
+            z = np.random.rand()
+            ixs = np.nonzero(cp-z > 0)[0]
+         
+            ii = ixs[0]
+            x = np.zeros((self.k, 1))
+            x[ii] = 1
+            y[:, t] = x[:, 0]
+        return y
+    
+    def forward(self, h0, X, Y):
+        """ Forward pass"""
+        a = []
+        h = []
+        o = []
+        p = []
+        h.append(h0)
+        loss = 0
+
+        for t in range(self.seq_length):
+            a.append(self.W.dot(h[t])+self.U.dot(X[:, t].reshape(self.k, 1))+self.b)
+            h.append(np.tanh(a[t]))
+            o.append(self.V.dot(h[t+1])+self.c)
+            p.append(self.softmax(o[t]))
+            loss += -np.log(np.dot(Y[:, t].reshape(1, self.k), p[t]))[0]
+        self.hprev = h[-1]
+        return loss, p, h, a, o
+
+    def backward(self, X, Y, p, h, a, o):
+        """ Backward pass"""
+        dU = np.zeros(self.U.shape)
+        dV = np.zeros(self.V.shape)
+        dW = np.zeros(self.W.shape)
+        db = np.zeros(self.b.shape)
+        dc = np.zeros(self.c.shape)
+        dh_next = np.zeros((self.m, 1))
+
+        for t in reversed(range(self.seq_length)):
+            do = p[t] - Y[:, t].reshape(self.k, 1)
+            dV += do.dot(h[t+1].T)
+            dc += do
+            dh = self.V.T.dot(do) + dh_next
+            da = dh * (1 - h[t+1]**2)
+            dU += da.dot(X[:, t].reshape(1, self.k))
+            db += da
+            dW += da.dot(h[t].T)
+            dh_next = self.W.T.dot(da)
+        for param in [dU, dV, dW, db, dc]:
+            np.clip(param, -5, 5, out=param)
+        return dU, dV, dW, db, dc
+    
+    def adagrad(self, X, Y, h0):
+        """ Train model with adagrad"""
+        loss, p, h, a, o = self.forward(h0, X, Y)
+        dU, dV, dW, db, dc = self.backward(X, Y, p, h, a, o)
+      
+        for param, dparam, mem in zip([self.U, self.V, self.W, self.b, self.c],
+                                  [dU, dV, dW, db, dc],
+                                  [self.mU, self.mV, self.mW, self.mb, self.mc]):
+            mem += dparam * dparam
+            param += -self.eta * dparam / np.sqrt(mem + 1e-8)
+        return loss
+    
+    def computeGradsNum(self, X, Y, h, z=1e-6):
+        """ Compute gradients numerically"""
+        grad_W = np.zeros(self.W.shape)
+        grad_U = np.zeros(self.U.shape)
+        grad_V = np.zeros(self.V.shape)
+        grad_b = np.zeros(self.b.shape)
+        grad_c = np.zeros(self.c.shape)
+        c = self.forward(h, X, Y)[0]
+        for i in range(self.b.shape[0]):
+            self.b[i] += z
+            c2 = self.forward(h, X, Y)[0]
+            grad_b[i] = (c2-c) / z
+            self.b[i] -= z
+        for i in range(self.c.shape[0]):
+            self.c[i] += z
+            c2 = self.forward(h, X, Y)[0]
+            grad_c[i] = (c2-c) / z
+            self.c[i] -= z
+        for i in range(self.U.shape[0]):
+            for j in range(self.U.shape[1]):
+                self.U[i, j] += z
+                c2 = self.forward(h, X, Y)[0]
+                grad_U[i, j] = (c2-c) / z
+                self.U[i, j] -= z
+        for i in range(self.V.shape[0]):
+            for j in range(self.V.shape[1]):
+                self.V[i, j] += z
+                c2 = self.forward(h, X, Y)[0]
+                grad_V[i, j] = (c2-c) / z
+                self.V[i, j] -= z
+        for i in range(self.W.shape[0]):
+            for j in range(self.W.shape[1]):
+                self.W[i, j] += z
+                c2 = self.forward(h, X, Y)[0]
+                grad_W[i, j] = (c2-c) / z
+                self.W[i, j] -= z
+        return grad_U, grad_V, grad_W, grad_b, grad_c
+    
+
+
