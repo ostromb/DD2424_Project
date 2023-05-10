@@ -1,13 +1,18 @@
 import numpy as np
 import copy
 import pandas as pd
+import re
 
 
-def load_data(filename):
+def load_data(filename,remove_footnotes=False):
     """ Load all characters from text file"""
 
     with open(filename, 'r') as f:
         data = [c for c in f.read()]
+    if remove_footnotes:
+        unwanted_chars = ["[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$","1","2","3","4","5","6","7","8","9","0"]
+        for c in unwanted_chars:
+            data = [x for x in data if x != c]
     return data
 
 def one_hot_encoding(data, char_to_ind, k):
