@@ -7,7 +7,7 @@ import re
 def load_data(filename,remove_footnotes=False):
     """ Load all characters from text file"""
 
-    with open(filename, 'r') as f:
+    with open(filename,encoding='cp850',mode='r') as f:
         data = [c for c in f.read()]
     if remove_footnotes:
         unwanted_chars = ["[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
