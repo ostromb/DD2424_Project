@@ -10,7 +10,7 @@ def load_data(filename,remove_footnotes=False):
     with open(filename,encoding='cp850',mode='r') as f:
         data = [c for c in f.read()]
     if remove_footnotes:
-        unwanted_chars = ["[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
+        unwanted_chars = ["[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$","1","2","3","4","5","6","7","8","9","0"]
         for c in unwanted_chars:
             data = [x for x in data if x != c]
     return data
