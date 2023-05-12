@@ -331,7 +331,7 @@ def split_input_target(batch):
     return input_text, target_text
 
 
-def generate_text(model, start_string, text_size, char_to_ind, ind_to_char):
+def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp=1.0):
     # Convert start string to numbers
     input_indices = tf.expand_dims([char_to_ind[s] for s in start_string], 0)
 
@@ -341,6 +341,9 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char):
         predictions = model(input_indices)
         # remove the batch dimension
         predictions = tf.squeeze(predictions, 0)
+
+        # scale probabilities by a temperature to generate more or less predictable text
+        predictions = predictions / temp
 
         # Sample a new character based on the log probability distribution in 'predictions'
         sampled_id = tf.random.categorical(
