@@ -2,6 +2,7 @@ import numpy as np
 import copy
 import pandas as pd
 import re
+import tensorflow as tf
 
 
 def load_data(filename,remove_footnotes=False):
@@ -36,7 +37,12 @@ def rel_error(x, y):
 
 def get_n_grams(text, n):
     """Divide data into n-grams"""
-    word_list = text.replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace("(", "").replace(")", "").split()
+    unwanted_chars =  ["0","1","2","3","4","5","6","7","8","9","[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
+    text_cleaned = ""
+    for c in text:
+        if c not in unwanted_chars:
+            text_cleaned += c
+    word_list = text_cleaned.split(" ")    
     N = len(word_list)
     data = [""]*(N-n+1)
     for i in range(N-n+1):
@@ -45,36 +51,45 @@ def get_n_grams(text, n):
     return data
 
 
-def measure_diversity(text_generated):
+def measure_diversity(text_generated, n_max=4):
     """Measures the amount of repetition in a longer generated text, using self-BLUE metric"""
     all_sentences = [s for s in text_generated.split(".") if s]
     N = len(all_sentences)
     bleu_scores = [0]*N
-    for i in range(N):
-        s = all_sentences[i]
-        sentences_copy = copy.deepcopy(all_sentences)
-        sentences_copy.remove(s)
-        correct_frac, bleu = measure_bleu(s, ".".join(sentences_copy))
-        bleu_scores[i] = bleu        
-    return np.mean(bleu_scores)
+    score = 0
+    if N>1:      # Self-bleu does not work for texts with only one sentence
+        for i in range(N):
+            s = all_sentences[i]
+            sentences_copy = copy.deepcopy(all_sentences)
+            sentences_copy.remove(s)
+            try:
+                _, bleu = measure_bleu(s, ".".join(sentences_copy), n_max)
+            except:
+                print(s)
+                print(sentences_copy)
+                raise
+            bleu_scores[i] = bleu    
+    score = np.mean(bleu_scores)    
+    return score
 
 
-def measure_bleu(text_generated, text_val):
+def measure_bleu(text_generated, text_val, n_max=4):
     """Measures the fraction of corrrectly spelled words and BLEU score"""
     precision_score = 1
-    nmax = 3
-    for n in range(nmax,0, -1):
+    for n in range(n_max,0, -1):
         words_gen = get_n_grams(copy.deepcopy(text_generated), n)
         words_val = get_n_grams(copy.deepcopy(text_val), n)
-        correct_grams_p = 0
-        output_length = len(words_gen)
-        reference_length = len(words_val)
-        for gram_gen in words_gen:
-            if gram_gen in words_val:
-                correct_grams_p += 1 
-        
-        precision = correct_grams_p/output_length
-        precision_score *= precision**(1/nmax) 
+        # If there are n-grams of size n in the generated text. Need to check this in case of very short sentences.
+        if len(words_gen)>0:
+            correct_grams = 0
+            output_length = len(words_gen)
+            reference_length = len(words_val)
+            for gram_gen in words_gen:
+                if gram_gen in words_val:
+                    correct_grams += 1 
+            
+            precision = correct_grams/output_length
+            precision_score *= precision**(1/n_max) 
     
     fraction_correct_words = precision     # since last iteration of for-loop is 1-grams   
     bleu = precision_score * min(1,output_length/reference_length)     
@@ -86,6 +101,32 @@ def split_input_target(batch):
     """ offset target by one time step """
     target_text = batch[1:]
     return input_text, target_text
+
+
+def generate_text(model, start_string, text_size, char_to_ind, ind_to_char):
+    # Convert start string to numbers
+    input_indices = tf.expand_dims([char_to_ind[s] for s in start_string], 0)
+
+    generated_text = ""
+    model.reset_states()
+    for i in range(text_size):
+        predictions = model(input_indices)
+        # remove the batch dimension
+        predictions = tf.squeeze(predictions, 0)
+
+        # Sample a new character based on the log probability distribution in 'predictions'
+        sampled_id = tf.random.categorical(
+        predictions,
+        num_samples=1
+        )[-1,0].numpy()
+
+        # Use sampled char as input for next iteration
+        input_indices = tf.expand_dims([sampled_id], 0)
+        generated_text += ind_to_char[sampled_id]
+
+    return start_string + generated_text
+
+
 
 class RNN:
     def __init__(self, m, k, eta, seq_length, sig):
