@@ -192,6 +192,9 @@ class RNN:
             o.append(self.V.dot(h[t+1])+self.c)
             p.append(self.softmax(o[t]))
             loss += -np.log(np.dot(Y[:, t].reshape(1, self.k), p[t]))[0]
+        
+        loss = loss/self.seq_length
+        
         self.hprev = h[-1]
         return loss, p, h, a, o
 
