@@ -4,7 +4,6 @@ import pandas as pd
 import tensorflow as tf
 
 
-
 def load_data(filename,remove_footnotes=False):
     """ Load all characters from text file"""
 
@@ -35,6 +34,10 @@ def rel_error(x, y):
     return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
 
+def augment_data(data):
+    pass
+
+
 def get_n_grams(text, n):
     """Divide data into n-grams"""
     unwanted_chars =  ["0","1","2","3","4","5","6","7","8","9","[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
@@ -53,10 +56,13 @@ def get_n_grams(text, n):
 
 def measure_diversity(text_generated, n_max=4):
     """Measures the amount of repetition in a longer generated text, using self-BLUE metric"""
-    all_sentences = [s for s in text_generated.split(".") if s]
+    all_sentences = [s for s in text_generated.replace(",", ".").split(".") if s]
     N = len(all_sentences)
     bleu_scores = [0]*N
     score = 0
+    #if N==1:
+    #    all_words = text_generated.split()
+    #    all_sentences = [" ".join(all_words[i*5:i*5+1]) for i in range(int(len(all_sentences)/5))]
     if N>1:      # Self-bleu does not work for texts with only one sentence
         for i in range(N):
             s = all_sentences[i]
@@ -69,8 +75,9 @@ def measure_diversity(text_generated, n_max=4):
                 print(sentences_copy)
                 raise
             bleu_scores[i] = bleu    
-    score = np.mean(bleu_scores)    
-    return score
+        return np.mean(bleu_scores)    
+    else: 
+        return -1
 
 
 def measure_bleu(text_generated, text_val, n_max=4):
@@ -92,7 +99,7 @@ def measure_bleu(text_generated, text_val, n_max=4):
             precision_score *= precision**(1/n_max) 
     
     fraction_correct_words = precision     # since last iteration of for-loop is 1-grams   
-    bleu = precision_score * min(1,output_length/reference_length)     
+    bleu = precision_score # * min(1,output_length/reference_length)     
     return fraction_correct_words, bleu
 
 
