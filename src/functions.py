@@ -103,7 +103,25 @@ def split_input_target(batch):
     return input_text, target_text
 
 
-def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp=1.0):
+
+def nucleus_sample(predictions_logits, p):
+    predictions = tf.nn.softmax(predictions_logits)[0].numpy()
+    prob_sum = 0
+    largest_probabilities = np.zeros(predictions.shape)
+    while prob_sum<p:
+        max_ind = np.argmax(predictions)
+        max_prob = predictions[max_ind]
+        prob_sum += max_prob
+        largest_probabilities[max_ind] = max_prob
+        predictions[max_ind] = 0
+   
+    l = [i for i in range(largest_probabilities.shape[-1])]
+    probabilities_scaled = copy.deepcopy(largest_probabilities)/prob_sum
+    sampled_elem = np.random.choice(l, p=probabilities_scaled)
+    return sampled_elem
+
+
+def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp=1.0, p=None):
     # Convert start string to numbers
     input_indices = tf.expand_dims([char_to_ind[s] for s in start_string], 0)
 
@@ -114,14 +132,16 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
         # remove the batch dimension
         predictions = tf.squeeze(predictions, 0)
 
-        # scale probabilities by a temperature to generate more or less predictable text
-        predictions = predictions / temp
-
-        # Sample a new character based on the log probability distribution in 'predictions'
-        sampled_id = tf.random.categorical(
-        predictions,
-        num_samples=1
-        )[-1,0].numpy()
+        if p:
+            sampled_id = nucleus_sample(predictions, p)
+        else:
+            # scale probabilities by a temperature to generate more or less predictable text
+            predictions = predictions / temp
+            # Sample a new character based on the log probability distribution in 'predictions'
+            sampled_id = tf.random.categorical(
+            predictions,
+            num_samples=1
+            )[-1,0].numpy()
 
         # Use sampled char as input for next iteration
         input_indices = tf.expand_dims([sampled_id], 0)
