@@ -4,10 +4,10 @@ import pandas as pd
 import tensorflow as tf
 
 
-def load_data(filename,remove_footnotes=False):
+def load_data(filename,remove_footnotes=False, encoding="cp850"):
     """ Load all characters from text file"""
 
-    with open(filename,encoding='cp850',mode='r') as f:
+    with open(filename,encoding=encoding,mode='r') as f:
         data = [c for c in f.read()]
     if remove_footnotes:
         unwanted_chars = ["[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
@@ -34,8 +34,32 @@ def rel_error(x, y):
     return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
 
-def augment_data(data):
-    pass
+def augment_data(data, n_swap):
+    all_sentences = data.split(".")
+    nr_sentences = len(all_sentences)
+   
+    # Random swap
+    count = 0
+    if n_swap>int(nr_sentences/5):
+        print("Too many swaps (more than 50\% of the sentences) for given number of sentences in the data. n_swap={} versus nr_sentences={}".format(n_swap, nr_sentences))
+        raise RuntimeError
+    while count < n_swap and count<=nr_sentences:
+        sentence_ind = np.random.choice([i for i in range(nr_sentences)])
+        sentence = all_sentences[sentence_ind]
+        # only choose "normal" sentences split by . for the sake of enkelhet
+        if sentence.replace("?", "").replace("-", "").replace("!", "").replace(",", "") == sentence and sentence.strip():
+            words = [i for i in all_sentences[sentence_ind].split() if i]
+            if len(words)>=2:
+                swap_indices = np.random.choice([i for i in range(len(words))], size=(2,), replace=False)
+                swap_words = [words[swap_indices[0]], words[swap_indices[1]]]
+                words[swap_indices[0]] = swap_words[1]
+                words[swap_indices[1]] = swap_words[0]
+                sentence = " ".join(words)
+                all_sentences[sentence_ind] = sentence
+                count += 1
+    
+    return ". ".join(all_sentences)
+
 
 
 def get_n_grams(text, n):
