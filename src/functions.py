@@ -101,9 +101,9 @@ def random_deletion(data, n_deletions):
     return ". ".join(all_sentences)
 
 
-def random_sentence_shuffle(data, n_shuffles):
+def random_sentence_swap(data, n_swaps):
     all_sentences = data.split(".")
-    for j in range(n_shuffles):
+    for j in range(n_swaps):
         swap_indices = np.random.choice([i for i in range(len(all_sentences))], size=(2,), replace=False)
         sentences_to_swap = [all_sentences[swap_indices[0]], all_sentences[swap_indices[1]]]
         all_sentences[swap_indices[0]] = sentences_to_swap[1]
@@ -111,7 +111,7 @@ def random_sentence_shuffle(data, n_shuffles):
     return ". ".join(all_sentences)
 
 
-def augment_data(data, n_synonyms=0, n_word_swaps=0, n_deletions=0, n_sentence_shuffles=0):
+def augment_data(data, n_synonyms=0, n_word_swaps=0, n_deletions=0, n_sentence_swaps=0):
     nr_sentences = len(data.split("."))
     nr_words = len(data.split())
     if n_word_swaps>int(nr_sentences/2):
@@ -128,8 +128,7 @@ def augment_data(data, n_synonyms=0, n_word_swaps=0, n_deletions=0, n_sentence_s
     # Random deletion
     data = random_deletion(data, n_deletions) if n_deletions else data
     # Randomly shuffle sentences
-    data = random_sentence_shuffle(data, n_sentence_shuffles) if n_sentence_shuffles else data
-
+    data = random_sentence_swap(data, n_sentence_swaps) if n_sentence_swaps else data
     return data
 
 
