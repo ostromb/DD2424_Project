@@ -1,0 +1,23 @@
+Tet had; cregurstan il.
+       Eveund reatunow, to de steplibll of yice seware and nos. Iper, of recoraonvanucle the gesenred cupom reccared stmencte. And an the dersaded of
+      therinsh at. Heiring, and thet and and nos Itly. By in weat pore a
+      and hit wo,ÔÇÖs _en tak and
+      voreissent, mooffor the hisse go. Henich no cpally my and ocre affal, it it prea _susprociagÔÇØ
+      hatlens. Dive of Lede of in the
+  A  the calf ÔÇÿEcatid. Here pirits impard whe
+      wen
+      fimy retlef. Ite, abliomsed andady of in had sowr of suck of senles ercerpicce filforer inglos mast the stald he
+      whak have braiteld cacon, ans lavatinak├®. The ats
+      howipereÔÇörearer of
+      nocalcieasice thes apits
+      ilial sing, to dece figl-hake, in hayPpany riona abore which a anleggivild, a
+      now
+      sonse tore no hte
+      welovedicuusalnation.E071O8. Orte and uniff had myupleed on is morition in whances
+      con me if intad instritsaulalted wito Pipppoikun in cosur coctutionted of i
+
+ loss function [array([4.48746454]), array([2.59460637]), array([1.84723522]), array([1.60063052]), array([1.57898664]), array([1.8855088]), array([1.41207673]), array([1.95537685]), array([1.86574119]), array([2.21748363]), array([2.45086052]), array([1.40814293]), array([2.37684669]), array([1.42549381]), array([2.37155157]), array([1.89103474]), array([1.62304091]), array([1.63789158]), array([2.02263458]), array([1.99959784]), array([2.71155697])]
+
+ fraction of correctly spelled words: 0.39436619718309857
+ Bleu score2: 0.00017
+ Repetition score2: 0.0041
