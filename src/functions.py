@@ -2,19 +2,51 @@ import numpy as np
 import copy
 import pandas as pd
 import tensorflow as tf
+import re
 
 
-
-def load_data(filename,remove_footnotes=False):
+def load_data(filename,remove_footnotes=False, word_level=False):
     """ Load all characters from text file"""
 
-    with open(filename,encoding='cp850',mode='r') as f:
-        data = [c for c in f.read()]
+    with open(filename,encoding='utf-8-sig',mode='r') as f:
+        data = [c for c in f.read() ]
+   
     if remove_footnotes:
-        unwanted_chars = ["[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
+        unwanted_chars = ["0","1","2","3","4","5","6","7","8","9","[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
         for c in unwanted_chars:
             data = [x for x in data if x != c]
-    return data
+
+    words = "".join(data.copy())
+    words = re.split(r'([\s.!?])', words)
+    words = [x for x in words if x ]
+    return np.array(data), np.array(words)
+
+def load_data1(filename,remove_footnotes=False, word_level=False):
+    """ Load all characters from text file"""
+
+    with open(filename,encoding='utf-8-sig',mode='r') as f:
+        chars = []
+        words = []
+        word = ""
+        unwanted_chars = ["0","1","2","3","4","5","6","7","8","9","[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
+        for c in f.read():
+           
+            if c == ' ':
+                words.append(word)
+                word = ""
+                word += '$'
+                chars.append('$')
+            elif c in {'.', '!', '?'}:
+                word += c
+                words.append(word)
+                word = ""
+                chars.append(c)
+            elif c in unwanted_chars:
+                continue
+            else:
+                word += c
+                chars.append(c)
+    return np.array(chars), np.array(words)
 
 def one_hot_encoding(data, char_to_ind, k):
     """ One hot encoding of data"""
@@ -35,6 +67,10 @@ def rel_error(x, y):
     return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
 
+def augment_data(data):
+    pass
+
+
 def get_n_grams(text, n):
     """Divide data into n-grams"""
     unwanted_chars =  ["0","1","2","3","4","5","6","7","8","9","[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
@@ -50,13 +86,23 @@ def get_n_grams(text, n):
         data[i] = gram
     return data
 
+def get_skip_grams(sequence,n):
+    N = len(sequence)
+    data = [None]*(N-n+1)
+    for i in range(N-n+1):
+        gram = " ".join(sequence[i:i+n])
+        data[i] = gram
+    return data
 
 def measure_diversity(text_generated, n_max=4):
     """Measures the amount of repetition in a longer generated text, using self-BLUE metric"""
-    all_sentences = [s for s in text_generated.split(".") if s]
+    all_sentences = [s for s in text_generated.replace(",", ".").split(".") if s]
     N = len(all_sentences)
     bleu_scores = [0]*N
     score = 0
+    #if N==1:
+    #    all_words = text_generated.split()
+    #    all_sentences = [" ".join(all_words[i*5:i*5+1]) for i in range(int(len(all_sentences)/5))]
     if N>1:      # Self-bleu does not work for texts with only one sentence
         for i in range(N):
             s = all_sentences[i]
@@ -69,8 +115,9 @@ def measure_diversity(text_generated, n_max=4):
                 print(sentences_copy)
                 raise
             bleu_scores[i] = bleu    
-    score = np.mean(bleu_scores)    
-    return score
+        return np.mean(bleu_scores)    
+    else: 
+        return -1
 
 
 def measure_bleu(text_generated, text_val, n_max=4):
@@ -92,16 +139,15 @@ def measure_bleu(text_generated, text_val, n_max=4):
             precision_score *= precision**(1/n_max) 
     
     fraction_correct_words = precision     # since last iteration of for-loop is 1-grams   
-    bleu = precision_score * min(1,output_length/reference_length)     
+    bleu = precision_score # * min(1,output_length/reference_length)     
     return fraction_correct_words, bleu
 
 
 def split_input_target(batch):
-    input_text = batch[:-1]
     """ offset target by one time step """
+    input_text = batch[:-1]
     target_text = batch[1:]
     return input_text, target_text
-
 
 
 def nucleus_sample(predictions_logits, p):
@@ -121,14 +167,64 @@ def nucleus_sample(predictions_logits, p):
     return sampled_elem
 
 
-def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp=1.0, p=None):
+def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp=1.0, p=None,word_level=False):
+    # Convert start string to numbers
+    if word_level:
+        input_indices = tf.expand_dims([char_to_ind[s] for s in start_string.split()], 0)
+        spacer = " "
+    else:
+        input_indices = tf.expand_dims([char_to_ind[s] for s in start_string], 0)
+        spacer = " "
+    
+    generated_text = ""
+    model.reset_states()
+    is_start_of_sentence = False
+    for i in range(text_size):
+        predictions = model(input_indices)
+        # remove the batch dimension
+        predictions = tf.squeeze(predictions, 0)
+
+        if p:
+            sampled_id = nucleus_sample(predictions, p)
+        else:
+            # scale probabilities by a temperature to generate more or less predictable text
+            predictions = predictions / temp
+            # Sample a new character based on the log probability distribution in 'predictions'
+            sampled_id = tf.random.categorical(
+            predictions,
+            num_samples=1
+            )[-1,0].numpy()
+        generated_word = ind_to_char[sampled_id]
+        if is_start_of_sentence and word_level and generated_word.islower():
+            generated_word = generated_word.capitalize()
+            is_start_of_sentence = False
+        if generated_word in {".", "!", "?"} and word_level:
+            is_start_of_sentence = True
+        # Use sampled char as input for next iteration
+        input_indices = tf.expand_dims([sampled_id], 0)
+        
+        if word_level:
+            if sampled_id != 2:
+                if generated_word in {".", ",", "!", "?"}:
+                    generated_text += generated_word
+                else:
+                    generated_text += spacer + generated_word
+        else:
+            generated_text +=  ind_to_char[sampled_id]
+        
+
+    return start_string + generated_text
+
+def generate_text1(model, start_string, text_size, char_to_ind, ind_to_char, temp=1.0, p=None):
     # Convert start string to numbers
     input_indices = tf.expand_dims([char_to_ind[s] for s in start_string], 0)
 
-    generated_text = ""
+    #generated_text = ""
+    generated_text = []
+    generated_text.append(start_string)
     model.reset_states()
     for i in range(text_size):
-        predictions = model(input_indices)
+        predictions = model(input_indices, training=False)
         # remove the batch dimension
         predictions = tf.squeeze(predictions, 0)
 
@@ -145,11 +241,9 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
 
         # Use sampled char as input for next iteration
         input_indices = tf.expand_dims([sampled_id], 0)
-        generated_text += ind_to_char[sampled_id]
+        generated_text.append(ind_to_char[sampled_id])
 
-    return start_string + generated_text
-
-
+    return generated_text
 
 class RNN:
     def __init__(self, m, k, eta, seq_length, sig):
