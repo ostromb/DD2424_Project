@@ -123,24 +123,14 @@ def augment_data(data, n_synonyms=0, n_word_swaps=0, n_deletions=0, n_sentence_s
 
     # Synonym swap
     data = synonym_replacement(data, n_synonyms) if n_synonyms else data
-
     # Random word swap
     data = random_word_swap(data, n_word_swaps) if n_word_swaps else data
-
     # Random deletion
     data = random_deletion(data, n_deletions) if n_deletions else data
-
     # Randomly shuffle sentences
     data = random_sentence_shuffle(data, n_sentence_shuffles) if n_sentence_shuffles else data
 
     return data
-
-
-if __name__=="__main__":
-    # debug
-    data = "Hej jag heter sofia. Nu ska vi testa random deletion och data augmentation. Dint, \t diner dike dignify. \n Lägger till en mening så det inte blir ett edge case. Vi får se hur det blir med denna mening?"
-    print(synonym_replacement(data, 1))
-
 
 
 def get_n_grams(text, n):
@@ -165,9 +155,6 @@ def measure_diversity(text_generated, n_max=4):
     N = len(all_sentences)
     bleu_scores = [0]*N
     score = 0
-    #if N==1:
-    #    all_words = text_generated.split()
-    #    all_sentences = [" ".join(all_words[i*5:i*5+1]) for i in range(int(len(all_sentences)/5))]
     if N>1:      # Self-bleu does not work for texts with only one sentence
         for i in range(N):
             s = all_sentences[i]
@@ -239,7 +226,7 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
     generated_text = ""
     model.reset_states()
     for i in range(text_size):
-        predictions = model(input_indices)
+        predictions = model(input_indices, training=False)
         # remove the batch dimension
         predictions = tf.squeeze(predictions, 0)
 
@@ -259,7 +246,6 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
         generated_text += ind_to_char[sampled_id]
 
     return start_string + generated_text
-
 
 
 class RNN:
