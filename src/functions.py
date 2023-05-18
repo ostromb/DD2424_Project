@@ -1,13 +1,14 @@
+from argparse import ArgumentError
 import numpy as np
 import copy
 import pandas as pd
 import tensorflow as tf
 
 
-def load_data(filename,remove_footnotes=False):
+def load_data(filename,remove_footnotes=False, encoding="cp850"):
     """ Load all characters from text file"""
 
-    with open(filename,encoding='cp850',mode='r') as f:
+    with open(filename,encoding=encoding,mode='r') as f:
         data = [c for c in f.read()]
     if remove_footnotes:
         unwanted_chars = ["[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
@@ -34,8 +35,102 @@ def rel_error(x, y):
     return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
 
-def augment_data(data):
-    pass
+def synonym_replacement(data, n_synonyms, encoding="utf8"):
+    with open("../Dataset/Training/synonyms.csv", "r", encoding=encoding) as file:
+        data_list = file.readlines()   
+    synonym_dict = {}
+    for row in data_list[1:]:
+        row.replace("[US]", "")
+        row_data = row.replace('"', "").split(":")
+        if len(row_data)>1:
+            word = row_data[0].split(";")[0].strip()
+            if len(word.split())==1:
+                synonyms = row_data[1].strip().split(";")
+                synonym_dict[word] = synonyms
+
+    count_syn = 0
+    word_list = data.split(" ")
+    word_indices_with_synonyms = [i for i in range(len(word_list)) if len(synonym_dict.get(word_list[i],[]))]
+    if len(word_indices_with_synonyms)<=n_synonyms:
+        warning_str = "Warning: the dataset contains {} words for which there exists synonyms in synonyms.csv, while n_synonyms = {}. "\
+            "\n Continuing with n_synonyms = {}".format(len(word_indices_with_synonyms), n_synonyms, int(len(word_indices_with_synonyms)/5))
+        print(warning_str)
+        n_synonyms = int(len(word_indices_with_synonyms)/5)
+    while count_syn<n_synonyms:
+        sampled_word_ind = np.random.choice(word_indices_with_synonyms)
+        sampled_word = word_list[sampled_word_ind]
+        if synonym_dict.get(sampled_word, False):
+            word_list[sampled_word_ind] = np.random.choice(synonym_dict[sampled_word])   
+            count_syn += 1
+
+    return " ".join(word_list)
+
+
+def random_word_swap(data, n_swaps):
+    all_sentences = data.split(".")
+    nr_sentences = len(all_sentences)
+    count_swap = 0
+    while count_swap < n_swaps and count_swap<=nr_sentences:
+        sentence_ind = np.random.choice([i for i in range(nr_sentences)])
+        sentence = all_sentences[sentence_ind]
+        # only choose sentences without ,?! for simplicity
+        if sentence.replace("?", "").replace("-", "").replace("!", "").replace(",", "") == sentence and sentence.strip():
+            words = [i for i in all_sentences[sentence_ind].split() if i]
+            if len(words)>=2:
+                swap_indices = np.random.choice([i for i in range(len(words))], size=(2,), replace=False)
+                words_to_swap = [words[swap_indices[0]], words[swap_indices[1]]]
+                words[swap_indices[0]] = words_to_swap[1]
+                words[swap_indices[1]] = words_to_swap[0]
+                all_sentences[sentence_ind] = " ".join(words)
+                count_swap += 1
+    return ". ".join(all_sentences)
+
+
+def random_deletion(data, n_deletions):
+    all_sentences = data.split(".")
+    nr_sentences = len(all_sentences)
+    for i in range(n_deletions):
+        ind = np.random.choice([i for i in range(nr_sentences)])
+        sentence = all_sentences[ind]
+        words = [i for i in sentence.split() if i]
+        if len(words)>2:
+            ind_to_delete = np.random.choice([i for i in range(len(words))])
+            del words[ind_to_delete]
+            all_sentences[ind] = " ".join(words)
+    
+    return ". ".join(all_sentences)
+
+
+def random_sentence_shuffle(data, n_shuffles):
+    all_sentences = data.split(".")
+    for j in range(n_shuffles):
+        swap_indices = np.random.choice([i for i in range(len(all_sentences))], size=(2,), replace=False)
+        sentences_to_swap = [all_sentences[swap_indices[0]], all_sentences[swap_indices[1]]]
+        all_sentences[swap_indices[0]] = sentences_to_swap[1]
+        all_sentences[swap_indices[1]] = sentences_to_swap[0]
+    return ". ".join(all_sentences)
+
+
+def augment_data(data, n_synonyms=0, n_word_swaps=0, n_deletions=0, n_sentence_shuffles=0):
+    nr_sentences = len(data.split("."))
+    nr_words = len(data.split())
+    if n_word_swaps>int(nr_sentences/2):
+        print("Too many swaps (more than 50\% of the sentences). input params: n_swap={}, nr_sentences={}".format(n_word_swaps, nr_sentences))
+        raise ArgumentError
+    if n_synonyms>int(nr_words/2):
+        print("Too many synonym replacemets (more than 50\% of the number of words). input params: n_synonyms={}, nr_words={}".format(n_synonyms, nr_words))
+        raise ArgumentError
+
+    # Synonym swap
+    data = synonym_replacement(data, n_synonyms) if n_synonyms else data
+    # Random word swap
+    data = random_word_swap(data, n_word_swaps) if n_word_swaps else data
+    # Random deletion
+    data = random_deletion(data, n_deletions) if n_deletions else data
+    # Randomly shuffle sentences
+    data = random_sentence_shuffle(data, n_sentence_shuffles) if n_sentence_shuffles else data
+
+    return data
 
 
 def get_n_grams(text, n):
@@ -60,9 +155,6 @@ def measure_diversity(text_generated, n_max=4):
     N = len(all_sentences)
     bleu_scores = [0]*N
     score = 0
-    #if N==1:
-    #    all_words = text_generated.split()
-    #    all_sentences = [" ".join(all_words[i*5:i*5+1]) for i in range(int(len(all_sentences)/5))]
     if N>1:      # Self-bleu does not work for texts with only one sentence
         for i in range(N):
             s = all_sentences[i]
@@ -134,7 +226,7 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
     generated_text = ""
     model.reset_states()
     for i in range(text_size):
-        predictions = model(input_indices)
+        predictions = model(input_indices, training=False)
         # remove the batch dimension
         predictions = tf.squeeze(predictions, 0)
 
@@ -154,7 +246,6 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
         generated_text += ind_to_char[sampled_id]
 
     return start_string + generated_text
-
 
 
 class RNN:
