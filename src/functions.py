@@ -40,17 +40,22 @@ def synonym_replacement(data, n_synonyms, encoding="utf8"):
         data_list = file.readlines()   
     synonym_dict = {}
     for row in data_list[1:]:
-        row.replace("[US]", "")
-        row_data = row.replace('"', "").split(":")
-        if len(row_data)>1:
-            word = row_data[0].split(";")[0].strip()
-            if len(word.split())==1:
-                synonyms = row_data[1].strip().split(";")
-                synonym_dict[word] = synonyms
+        prev_word = ""
+        row_data = row.split(",")
+        word = row_data[0].strip()
+        if len(row_data) == 3 and not "|" in row:  # only take words with one synonym
+            # Only use synonyms for single words, not phrases. 
+            if len(word.split())==1 and word != prev_word:   # only use words with one meaning
+                synonyms = row_data[2].split(";")
+                synonym = synonyms[0].strip()
+                if len(synonyms)==1 and not synonym[0:len(synonym)-2] in word and not word in synonym: # filter out for instance "defying, verb, defy; spite" and "improving, verb, improve", and "poor; poor people"
+                    synonym_dict[word] = synonym
+                    synonym_dict[synonyms[0]] = word
+                    prev_word = word
 
     count_syn = 0
-    word_list = data.split(" ")
-    word_indices_with_synonyms = [i for i in range(len(word_list)) if len(synonym_dict.get(word_list[i],[]))]
+    word_list = data.split()
+    word_indices_with_synonyms = [i for i in range(len(word_list)) if synonym_dict.get(word_list[i], False)]
     if len(word_indices_with_synonyms)<=n_synonyms:
         warning_str = "Warning: the dataset contains {} words for which there exists synonyms in synonyms.csv, while n_synonyms = {}. "\
             "\n Continuing with n_synonyms = {}".format(len(word_indices_with_synonyms), n_synonyms, int(len(word_indices_with_synonyms)/5))
@@ -58,9 +63,9 @@ def synonym_replacement(data, n_synonyms, encoding="utf8"):
         n_synonyms = int(len(word_indices_with_synonyms)/5)
     while count_syn<n_synonyms:
         sampled_word_ind = np.random.choice(word_indices_with_synonyms)
-        sampled_word = word_list[sampled_word_ind]
+        sampled_word = word_list[sampled_word_ind].strip()
         if synonym_dict.get(sampled_word, False):
-            word_list[sampled_word_ind] = np.random.choice(synonym_dict[sampled_word])   
+            word_list[sampled_word_ind] = synonym_dict[sampled_word] 
             count_syn += 1
 
     return " ".join(word_list)
@@ -130,6 +135,7 @@ def augment_data(data, n_synonyms=0, n_word_swaps=0, n_deletions=0, n_sentence_s
     # Randomly shuffle sentences
     data = random_sentence_swap(data, n_sentence_swaps) if n_sentence_swaps else data
     return data
+
 
 
 def get_n_grams(text, n):
