@@ -180,7 +180,7 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
     model.reset_states()
     is_start_of_sentence = False
     for i in range(text_size):
-        predictions = model(input_indices)
+        predictions = model(input_indices, training=False)
         # remove the batch dimension
         predictions = tf.squeeze(predictions, 0)
 
@@ -213,7 +213,7 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
             generated_text +=  ind_to_char[sampled_id]
         
 
-    return start_string + generated_text
+    return generated_text
 
 def generate_text1(model, start_string, text_size, char_to_ind, ind_to_char, temp=1.0, p=None):
     # Convert start string to numbers
