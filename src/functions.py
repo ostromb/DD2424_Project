@@ -189,7 +189,6 @@ def measure_diversity(text_generated, n_max=4):
 def measure_bleu(text_generated, text_val, n_max=4):
     """Measures the fraction of corrrectly spelled words and BLEU score"""
     precision_score = 1
-    precision = -1
     for n in range(n_max,0, -1):
         words_gen = get_n_grams(copy.deepcopy(text_generated), n)
         words_val = get_n_grams(copy.deepcopy(text_val), n)
@@ -260,7 +259,7 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
         input_indices = tf.expand_dims([sampled_id], 0)
         generated_text += ind_to_char[sampled_id]
 
-    return generated_text
+    return start_string + generated_text
 
 
 class RNN:
