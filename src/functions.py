@@ -6,32 +6,26 @@ import tensorflow as tf
 import re
 
 
-def load_data(filename,remove_footnotes=False, word_level=False):
+def load_data(filename, remove_footnotes=False, encoding="cp850"):
     """ Load all characters from text file"""
 
-    with open(filename,encoding='utf-8-sig',mode='r') as f:
-        data = [c for c in f.read() ]
-   
+    with open(filename,encoding=encoding,mode='r') as f:
+        data = [c for c in f.read()]
     if remove_footnotes:
-        unwanted_chars = ["0","1","2","3","4","5","6","7","8","9","[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
+        unwanted_chars = ["[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
         for c in unwanted_chars:
             data = [x for x in data if x != c]
+    return data
 
-    words = "".join(data.copy())
-    words = re.split(r'([\s.!?])', words)
-    words = [x for x in words if x ]
-    return np.array(data), np.array(words)
 
-def load_data1(filename,remove_footnotes=False, word_level=False):
+def load_data1(filename, remove_footnotes=False, word_level=False, encoding="utf-8-sig"):
     """ Load all characters from text file"""
-
-    with open(filename,encoding='utf-8-sig',mode='r') as f:
+    with open(filename,encoding=encoding,mode='r') as f:
         chars = []
         words = []
         word = ""
         unwanted_chars = ["0","1","2","3","4","5","6","7","8","9","[","]","(",")","{","}","*","|","<",">","=","#","-","_","^","~","\\","/",":",";","&","@","%","$"]
-        for c in f.read():
-           
+        for c in f.read():        
             if c == ' ':
                 words.append(word)
                 word = ""
@@ -48,6 +42,7 @@ def load_data1(filename,remove_footnotes=False, word_level=False):
                 word += c
                 chars.append(c)
     return np.array(chars), np.array(words)
+
 
 def one_hot_encoding(data, char_to_ind, k):
     """ One hot encoding of data"""
@@ -232,6 +227,7 @@ def measure_diversity(text_generated, n_max=4):
 def measure_bleu(text_generated, text_val, n_max=4):
     """Measures the fraction of corrrectly spelled words and BLEU score"""
     precision_score = 1
+    precision = -1
     for n in range(n_max,0, -1):
         words_gen = get_n_grams(copy.deepcopy(text_generated), n)
         words_val = get_n_grams(copy.deepcopy(text_val), n)
