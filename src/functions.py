@@ -43,19 +43,20 @@ def synonym_replacement(data, n_synonyms, encoding="utf8"):
         prev_word = ""
         row_data = row.split(",")
         word = row_data[0].strip()
-        if len(row_data) == 3 and not "|" in row:  # only take words with one synonym
+        if not "|" in row:  # only use words with one meaning; groups of different meanings are separated by |
             # Only use synonyms for single words, not phrases. 
-            if len(word.split())==1 and word != prev_word:   # only use words with one meaning
+            if len(word.split())==1 and word != prev_word:   # only use words with one meaning; one word can occur in several lines with different meanings
                 synonyms = row_data[2].split(";")
                 synonym = synonyms[0].strip()
                 if len(synonyms)==1 and not synonym[0:len(synonym)-2] in word and not word in synonym: # filter out for instance "defying, verb, defy; spite" and "improving, verb, improve", and "poor; poor people"
-                    synonym_dict[word] = synonym
-                    synonym_dict[synonyms[0]] = word
+                    synonym_dict[word] = synonyms
+                    #synonym_dict[synonyms[0]] = word
                     prev_word = word
-
+   
+    used_synonyms = ""
     count_syn = 0
-    word_list = data.split()
-    word_indices_with_synonyms = [i for i in range(len(word_list)) if synonym_dict.get(word_list[i], False)]
+    word_list = data.split(" ")
+    word_indices_with_synonyms = [i for i in range(len(word_list)) if synonym_dict.get(word_list[i].strip(), False)]
     if len(word_indices_with_synonyms)<=n_synonyms:
         warning_str = "Warning: the dataset contains {} words for which there exists synonyms in synonyms.csv, while n_synonyms = {}. "\
             "\n Continuing with n_synonyms = {}".format(len(word_indices_with_synonyms), n_synonyms, int(len(word_indices_with_synonyms)/5))
@@ -64,11 +65,14 @@ def synonym_replacement(data, n_synonyms, encoding="utf8"):
     while count_syn<n_synonyms:
         sampled_word_ind = np.random.choice(word_indices_with_synonyms)
         sampled_word = word_list[sampled_word_ind].strip()
+        remaining_whitespace = word_list[sampled_word_ind][len(sampled_word):-1] if len(sampled_word)!=len(word_list[sampled_word_ind]) else None
         if synonym_dict.get(sampled_word, False):
-            word_list[sampled_word_ind] = synonym_dict[sampled_word] 
+            sampled_synonym = np.random.choice(synonym_dict[sampled_word])
+            word_list[sampled_word_ind] = sampled_synonym + remaining_whitespace if remaining_whitespace else sampled_synonym
+            used_synonyms += word_list[sampled_word_ind] + " "
             count_syn += 1
 
-    return " ".join(word_list)
+    return " ".join(word_list), used_synonyms
 
 
 def random_word_swap(data, n_swaps):
@@ -119,22 +123,27 @@ def random_sentence_swap(data, n_swaps):
 def augment_data(data, n_synonyms=0, n_word_swaps=0, n_deletions=0, n_sentence_swaps=0):
     nr_sentences = len(data.split("."))
     nr_words = len(data.split())
-    if n_word_swaps>int(nr_sentences/2):
-        print("Too many swaps (more than 50\% of the sentences). input params: n_swap={}, nr_sentences={}".format(n_word_swaps, nr_sentences))
-        raise ArgumentError
+    if n_word_swaps>int(nr_words/2):
+        print("Too many swaps (more than 50\% of the sentences). input params: n_word_swaps={}, nr_words={}".format(n_word_swaps, nr_words))
+        raise RuntimeError
+    if n_sentence_swaps>int(nr_sentences/2):
+        print("Too many swaps (more than 50\% of the sentences). input params: n_sentence_swap={}, nr_sentences={}".format(n_sentence_swaps, nr_sentences))
+        raise RuntimeError
     if n_synonyms>int(nr_words/2):
         print("Too many synonym replacemets (more than 50\% of the number of words). input params: n_synonyms={}, nr_words={}".format(n_synonyms, nr_words))
-        raise ArgumentError
+        raise RuntimeError
 
     # Synonym swap
-    data = synonym_replacement(data, n_synonyms) if n_synonyms else data
+    used_synonyms = ""
+    if n_synonyms:
+        data, used_synonyms = synonym_replacement(data, n_synonyms)
     # Random word swap
     data = random_word_swap(data, n_word_swaps) if n_word_swaps else data
     # Random deletion
     data = random_deletion(data, n_deletions) if n_deletions else data
     # Randomly shuffle sentences
     data = random_sentence_swap(data, n_sentence_swaps) if n_sentence_swaps else data
-    return data
+    return data, used_synonyms
 
 
 
@@ -180,6 +189,7 @@ def measure_diversity(text_generated, n_max=4):
 def measure_bleu(text_generated, text_val, n_max=4):
     """Measures the fraction of corrrectly spelled words and BLEU score"""
     precision_score = 1
+    precision = -1
     for n in range(n_max,0, -1):
         words_gen = get_n_grams(copy.deepcopy(text_generated), n)
         words_val = get_n_grams(copy.deepcopy(text_val), n)
@@ -250,7 +260,7 @@ def generate_text(model, start_string, text_size, char_to_ind, ind_to_char, temp
         input_indices = tf.expand_dims([sampled_id], 0)
         generated_text += ind_to_char[sampled_id]
 
-    return start_string + generated_text
+    return generated_text
 
 
 class RNN:
