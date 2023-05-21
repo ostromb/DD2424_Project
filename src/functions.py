@@ -5,10 +5,10 @@ import tensorflow as tf
 import re
 
 
-def load_data(filename,remove_footnotes=False, word_level=False):
+def load_data(filename,remove_footnotes=False, word_level=False, encoding="utf-8-sig"):
     """ Load all characters from text file"""
 
-    with open(filename,encoding='utf-8-sig',mode='r') as f:
+    with open(filename,encoding=encoding,mode='r') as f:
         data = [c for c in f.read() ]
    
     if remove_footnotes:
@@ -18,13 +18,13 @@ def load_data(filename,remove_footnotes=False, word_level=False):
 
     words = "".join(data.copy())
     words = re.split(r'([\s.!?])', words)
-    words = [x for x in words if x ]
+    words = [x for x in words if len(x.strip()) ]
     return np.array(data), np.array(words)
 
-def load_data1(filename,remove_footnotes=False, word_level=False):
+def load_data1(filename,remove_footnotes=False, word_level=False, encoding="utf-8-sig"):
     """ Load all characters from text file"""
 
-    with open(filename,encoding='utf-8-sig',mode='r') as f:
+    with open(filename,encoding=encoding,mode='r') as f:
         chars = []
         words = []
         word = ""
